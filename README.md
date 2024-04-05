@@ -1,6 +1,6 @@
 # Embeddings-for-Block-Time-Prediction
 
-This repository contains the implementation code for the embeddings and neural network architectures described in our research paper: Embedding-Based Representation Learning for Building Data-Driven Flight Schedules. It includes scripts for five different architectures, alongside the t-SNE projections of our most successful runs.
+This repository contains the implementation code for the neural network architectures described in our research paper: Embedding-Based Representation Learning for Building Data-Driven Flight Schedules. It includes scripts for five different architectures, alongside the t-SNE projections of our most successful runs.
 
 ## Structure
 
