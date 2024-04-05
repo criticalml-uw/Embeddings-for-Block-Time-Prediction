@@ -8,7 +8,7 @@ Changes from the original -
 2. We will modify the forward function to have just the linear layers followed by a ReLU activation
 3. Instead of the embedding layer we ohe each categrical variable and then concatenate them , then apply a linear + relu on it ( reducing the output to 1461(total unique categorical states )//2
 
-(This takes more than 25 hrs to run )
+
 
 """
 
