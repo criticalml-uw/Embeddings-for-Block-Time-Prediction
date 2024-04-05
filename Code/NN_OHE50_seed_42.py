@@ -11,8 +11,6 @@ Changes from the original -
 Main changes from arch 4 --> output features instead of 0.75 is now 1 i.e no compression
 
 
-(This takes more than 25 hrs to run )
-
 """
 
 # ------------ IMPORT LIBRARIES --------------
