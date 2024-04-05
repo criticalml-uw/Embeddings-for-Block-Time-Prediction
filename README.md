@@ -18,5 +18,5 @@ To replicate our results or to use these models in your own project, follow the 
 
 ## Embeddings from best run
 
-![t-SNE Month](Embeddings_tns_plots/emb_month.png)
+![t-SNE Month](Embeddings_tnse_plots/emb_month.png)
 *Figure 1: t-SNE Projection of the Months, highlighting clustering patterns.*
