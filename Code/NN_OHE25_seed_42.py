@@ -11,7 +11,6 @@ Changes from the original -
 Main changes from arch 3 --> output features instead of 0.5 is now 0.75 i.e lesser compression
 
 
-(This takes more than 25 hrs to run )
 
 """
 
