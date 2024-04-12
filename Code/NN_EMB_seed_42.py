@@ -1,18 +1,6 @@
 # -*- coding: utf-8 -*-
 """Pytorch_Embeddings_all_data_train_val_test.ipynb
-
-"MAIN CHANGE IS THIS DOES NOT HAVE EMBEDDING LAYER ANYMORE"
-
-Changes from the original - 
-1. We will remove the dropout (self.emb_drop and self.drops) and batch normalization layers (self.bn1, self.bn2, and self.bn3). 
-2. We will modify the forward function to have just the linear layers followed by a ReLU activation
-3. Instead of the embedding layer we ohe each categrical variable and then concatenate them , then apply a linear + relu on it ( reducing the output to 1461(total unique categorical states )//2
-
-
-
-"""
-
-# ------------ IMPORT LIBRARIES --------------
+ ------------ IMPORT LIBRARIES --------------
 import os
 import math
 import matplotlib.pylab as plt
@@ -55,7 +43,7 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(SEED)
     
 # ---- Load data for a seed -----------------
-seed=42  # For data 
+seed=52  # For data 
 data_dir = "/home/aniketb/scratch/data/BTS_processed_2018_by_seed"
 
 # Load train data
@@ -70,13 +58,20 @@ with open(f"{data_dir}/{seed}/val_data.pkl", "rb") as f:
 with open(f"{data_dir}/{seed}/test_data.pkl", "rb") as f:
     X_test, y_test = pickle.load(f)
     
+# Load the label encoders 
+with open(f"{data_dir}/{seed}/label_encoders.pkl", "rb")  as f:
+    label_encoders = pd.read_pickle(f)
+    
         
 #------Result File ----------
-results_file = f"BTS/Pytorch_embeddings_jobs/output_paper1_results/emb_0_arch_3/results_seed_{seed}.txt"  
+results_file = f"BTS/Pytorch_embeddings_jobs/output_paper1_results/emb_0_arch_2/results_seed_{seed}.txt" 
+
+#---- Embedding location ---------
+embedding_dir = f"/home/aniketb/scratch/output_paper1/best_run"
 
 #---- Summary Writer for logs 
 # The base directory for tensorboard logs
-base_dir = f"/home/aniketb/scratch/saved/logs_output_paper1/emb_0_arch_3/{seed}"
+base_dir = f"/home/aniketb/scratch/saved/logs_output_paper1/best_run/emb_0_arch_2/{seed}"
 log_dir = f"{base_dir}/"
 writer = SummaryWriter(log_dir=log_dir)
     
@@ -125,46 +120,35 @@ y_test_tensor = torch.tensor(y_test.values, dtype=torch.float32).unsqueeze(1)
 """# Define the Network Architecture"""
 
 # --- 1. Define Network Architecture ---
-# After the ohe encoding the linear layer reduces to half the dimensions 
 class TabularModel(nn.Module):
-    def __init__(self, cat_dims, n_cont):  # cat_dims: List of unique values per categorical column
+    def __init__(self, embedding_sizes, n_cont):
         super(TabularModel, self).__init__()
-        
-        self.cat_dims = cat_dims
-        self.n_cat = sum(cat_dims)  # Total number of unique values across all categorical columns
-        self.n_cont = n_cont
-        
-        # Linear + ReLU for categorical features
-        self.lin_cat = nn.Linear(self.n_cat, self.n_cat // 2)  # Output size is half of the input size
-        
-        # Fully connected layers
-        self.lin1 = nn.Linear(self.n_cat // 2 + self.n_cont, 200)
+        self.embeds = nn.ModuleList([nn.Embedding(categories, size) for categories, size in embedding_sizes])
+        n_emb = sum(e.embedding_dim for e in self.embeds)
+        self.n_emb, self.n_cont = n_emb, n_cont
+        self.lin1 = nn.Linear(self.n_emb + self.n_cont, 200)
         self.lin2 = nn.Linear(200, 100)
         self.lin3 = nn.Linear(100, 1)
 
-    def one_hot_encode(self, x_cat):
-        # One-hot encode each categorical feature and then concatenate them
-        return torch.cat([F.one_hot(x_cat[:, i], self.cat_dims[i]) for i in range(x_cat.size(1))], dim=1)
-
     def forward(self, x_cat, x_cont):
-        x_cat = self.one_hot_encode(x_cat).float()  # One-hot encoding the categorical features
-        x_cat = F.relu(self.lin_cat(x_cat))  # Linear + ReLU for categorical features
-        x_cont = x_cont.float()  # Ensure x_cont is also a float
-        x = torch.cat([x_cat, x_cont], 1)  # Concatenation of one-hot encoded categorical data and continuous data
-        
+        x = [e(x_cat[:, i]) for i, e in enumerate(self.embeds)]
+        x = torch.cat(x, 1)
+        x = F.relu(x)  # ReLU activation after the embeddings
+        x2 = x_cont
+        x = torch.cat([x, x2], 1)
         x = F.relu(self.lin1(x))
         x = F.relu(self.lin2(x))
         return self.lin3(x)
 
+# Define embedding sizes based on max label for each category + 1
+embedding_sizes = [(X_train[col].max() + 1, min(50, (X_train[col].nunique() + 1) // 2)) for col in categorical_features]
 
-cat_dims = list(X_train[col].nunique() for col in categorical_features)
-n_cont = len(numerical_features)
 
-model = TabularModel(cat_dims, n_cont)
-print("Model architecture:\n", model)
+
+print("Embedding sizes:", embedding_sizes)
 
 #--------- TENSORBOARD GRAPH 
-
+model = TabularModel(embedding_sizes, len(numerical_features))
 dummy_input_cat = torch.zeros(1, len(categorical_features), dtype=torch.int64)
 dummy_input_cont = torch.zeros(1, len(numerical_features), dtype=torch.float32)
 writer.add_graph(model, (dummy_input_cat, dummy_input_cont))
@@ -182,8 +166,8 @@ test_ds = TensorDataset(X_cat_test, X_cont_test, y_test_tensor)
 results = []
 
 # Define different batch sizes and learning rates you want to experiment with
-batch_sizes = [64, 128] # 32, 64, 128
-learning_rates = [0.0005] # 0.001, 0.005, 0.0001
+batch_sizes = [32] #16, 32, 64
+learning_rates = [0.0001] # 0.001, 0.005
 
 for batch in batch_sizes:
     for lr in learning_rates:
@@ -199,7 +183,7 @@ for batch in batch_sizes:
         test_loader = DataLoader(dataset=test_ds, batch_size=batch, shuffle=False)
         
         # Create instance of the neural network
-        model = TabularModel(cat_dims, n_cont)
+        model = TabularModel(embedding_sizes, len(numerical_features))
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
 
@@ -313,6 +297,7 @@ for batch in batch_sizes:
 # Close the SummaryWriter
 writer.close()
 
+
 # Print results 
 for res in results:
     lr = res['Learning Rate']
@@ -322,6 +307,29 @@ for res in results:
     test_loss = res['Test Loss']
     
     print(f"{lr}\t{batch}\t{train_loss:.4f}\t{val_loss:.4f}\t{test_loss:.4f}")
+    
+"""Extract and dump the embeddings to the embeddings_dir
+"""
+def embeddings_to_dataframe(embeddings, col, label_encoder):
+    # Decode the labels back to original classes
+    category_encodings = list(range(embeddings.shape[0]))
+    category_names = [label_encoder.inverse_transform([idx])[0] for idx in category_encodings]
+    
+    # Convert embeddings to dataframe
+    df = pd.DataFrame(embeddings, index=category_names, columns=[f"dim_{i}" for i in range(embeddings.shape[1])])
+    return df
+
+# Extracting embeddings for each categorical feature and storing in a dictionary of DataFrames
+embeddings_dfs = {}
+
+for i, col in enumerate(categorical_features):
+    embeddings = model.embeds[i].weight.data.cpu().numpy()
+    embeddings_dfs[col] = embeddings_to_dataframe(embeddings, col, label_encoders[col])
+# Save embeddings to a pickle file
+with open(f"{embedding_dir}/embeddings.pkl", 'wb') as f:
+    pickle.dump(embeddings_dfs, f)
+
+    
 
 # Write the results in a text file 
 # Now, write the collected results to a text file
@@ -336,7 +344,12 @@ with open(results_file, 'w') as file:
     file.write(str(model))  # Convert the model architecture to string and write to file
     file.write("\n\n")
     
-       
+    # Save embedding sizes
+    file.write("Embedding Sizes:\n")
+    for size in embedding_sizes:
+        file.write(str(size) + "\n")
+    file.write("\n\n")
+    
     # Results
     file.write('Results:\n')
     file.write('Learning Rate\tBatch Size\tTrain Loss\tValidation Loss\tTest Loss\n')
@@ -345,6 +358,9 @@ with open(results_file, 'w') as file:
     # Loop through the results and write each one to the file
     for res in results:
         file.write(f"{res['Learning Rate']}\t{res['Batch Size']}\t{res['Train Loss']:.4f}\t{res['Validation Loss']:.4f}\t{res['Test Loss']:.4f}\n")
+
+
+
 
 
 
