@@ -42,7 +42,7 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(SEED)
     
 # ---- Load data for a seed -----------------
-seed=52  # For data 
+seed=42  # For data 
 data_dir = "/home/aniketb/scratch/data/BTS_processed_2018_by_seed"
 
 # Load train data
